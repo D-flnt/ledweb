@@ -1,0 +1,10 @@
+{
+  "led_count": 300,
+  "gpio_pin": 18,
+  "freq_hz": 800000,
+  "dma": 10,
+  "invert": false,
+  "brightness": 200,
+  "channel": 0,
+  "strip_type": "ws281x"
+}

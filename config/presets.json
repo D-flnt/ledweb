@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Neon Regenboog",
+    "effect": "rainbow_cycle",
+    "params": {
+      "speed": 1,
+      "intensity": 1,
+      "brightness": 220
+    },
+    "segments": []
+  },
+  {
+    "name": "Rustige Pulse",
+    "effect": "breathing",
+    "params": {
+      "color": [
+        64,
+        196,
+        255
+      ],
+      "speed": 0.5,
+      "intensity": 0.6
+    },
+    "segments": []
+  }
+]

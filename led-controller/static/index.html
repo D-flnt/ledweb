@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON LED CONTROLLER</title>
+    <style>
+        :root {
+            --bg-color: #050510;
+            --panel-color: #0b0b1a;
+            --primary: #00ffcc;
+            --secondary: #ff00ff;
+            --text: #e0e0e0;
+            --glass: rgba(255, 255, 255, 0.05);
+        }
+        * { box-sizing: border-box; }
+        body {
+            background: radial-gradient(circle at 20% 20%, rgba(0,255,204,0.1), transparent 30%), 
+                        radial-gradient(circle at 80% 0%, rgba(255,0,255,0.12), transparent 35%),
+                        var(--bg-color);
+            color: var(--text);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        h1, h2, h3 { text-transform: uppercase; letter-spacing: 2px; margin: 0; }
+        h1 { text-shadow: 0 0 10px var(--primary); font-size: 1.5rem; margin-bottom: 12px;}
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--panel-color);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+        }
+
+        /* Toggles en Sliders */
+        .control-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-size: 0.9rem; color: #888; }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            outline: none;
+            appearance: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: var(--primary);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--primary);
+            cursor: pointer;
+        }
+
+        input[type="color"] {
+            width: 100%;
+            height: 40px;
+            border: none;
+            background: none;
+            cursor: pointer;
+        }
+
+        /* Effect Grid */
+        .effect-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .fx-btn {
+            background: var(--glass);
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            user-select: none;
+        }
+        .fx-btn:hover { background: var(--primary); color: #000; box-shadow: 0 0 15px var(--primary); }
+        .fx-btn.active { background: var(--primary); color: #000; box-shadow: 0 0 20px var(--primary); }
+
+        /* Power Switch */
+        .power-switch {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(26px); }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: red;
+            border-radius: 50%;
+            margin-right: 5px;
+            box-shadow: 0 0 5px red;
+        }
+        .connected .status-indicator { background: #0f0; box-shadow: 0 0 5px #0f0; }
+
+        /* Canvas visualizer */
+        #viz-wrap {
+            max-width: 1200px;
+            margin: 0 auto 20px auto;
+            padding: 16px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(0,255,204,0.12), rgba(255,0,255,0.12));
+            box-shadow: 0 10px 25px rgba(0,0,0,0.45);
+        }
+        #viz {
+            width: 100%;
+            height: 140px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.45);
+        }
+    </style>
+</head>
+<body>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <h1>RASPBERRY LED CONTROL</h1>
+        <div id="connection" class=""><span class="status-indicator"></span><span id="conn-text">Verbinden...</span></div>
+    </div>
+
+    <div id="viz-wrap">
+        <canvas id="viz"></canvas>
+    </div>
+
+    <div class="dashboard">
+        
+        <!-- Algemene Instellingen -->
+        <div class="card">
+            <div class="power-switch">
+                <h2>Systeem Status</h2>
+                <label class="switch">
+                    <input type="checkbox" id="powerToggle" onchange="updateState('on', this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="control-group">
+                <label>Helderheid Master</label>
+                <input type="range" min="0" max="255" id="brightness" oninput="updateState('brightness', parseInt(this.value))">
+            </div>
+
+            <div class="control-group">
+                <label>Snelheid Effecten</label>
+                <input type="range" min="0" max="255" id="speed" oninput="updateState('speed', parseInt(this.value))">
+            </div>
+
+            <div class="control-group">
+                <label>Primaire Kleur</label>
+                <input type="color" id="primary_color" oninput="updateState('primary_color', this.value)">
+            </div>
+        </div>
+
+        <!-- Effect Kiezer -->
+        <div class="card">
+            <h2>Effecten</h2>
+            <p style="font-size:0.8rem; color:#666;">Klik om te activeren</p>
+            <div class="effect-grid">
+                <div class="fx-btn" onclick="setEffect('solid')" id="btn-solid">Solid</div>
+                <div class="fx-btn" onclick="setEffect('rainbow')" id="btn-rainbow">Rainbow</div>
+                <div class="fx-btn" onclick="setEffect('breathing')" id="btn-breathing">Breathing</div>
+                <div class="fx-btn" onclick="setEffect('scanner')" id="btn-scanner">Scanner</div>
+                <div class="fx-btn" onclick="setEffect('matrix')" id="btn-matrix">Matrix</div>
+                <div class="fx-btn" onclick="setEffect('fire')" id="btn-fire">Fire</div>
+                <div class="fx-btn" onclick="setEffect('strobe_on_beat')" id="btn-strobe_on_beat">Strobe on Beat</div>
+                <div class="fx-btn" onclick="setEffect('spectrum_stream')" id="btn-spectrum_stream">Spectrum Stream</div>
+            </div>
+        </div>
+
+        <!-- Audio Settings -->
+        <div class="card">
+            <h2>Audio Reactiviteit 🎵</h2>
+            <div class="effect-grid" style="margin-bottom: 15px;">
+                <div class="fx-btn" onclick="setEffect('audio_bars')" id="btn-audio_bars">Bars</div>
+                <div class="fx-btn" onclick="setEffect('audio_pulse')" id="btn-audio_pulse">Bass Pulse</div>
+            </div>
+            
+            <div class="control-group">
+                <label>Microfoon Gevoeligheid (Gain)</label>
+                <input type="range" min="1" max="50" step="0.5" id="audio_gain" oninput="updateState('audio_gain', parseFloat(this.value))">
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(wsProtocol + '//' + location.host + '/ws');
+        let appState = {};
+        let vizBands = new Array(8).fill(0);
+        let vizTargets = new Array(8).fill(0);
+        let lastBeat = 0;
+
+        const canvas = document.getElementById('viz');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        socket.onopen = function() {
+            document.getElementById('connection').classList.add('connected');
+            document.getElementById('conn-text').innerText = "Online";
+        };
+
+        socket.onmessage = function(event) {
+            const msg = JSON.parse(event.data);
+            if(msg.type === 'state') {
+                appState = msg.data;
+                syncUI();
+            } else if (msg.type === 'audio') {
+                const data = msg.data;
+                vizTargets = data.bands || vizTargets;
+                if (data.beat) {
+                    lastBeat = performance.now();
+                }
+            }
+        };
+
+        socket.onclose = function() {
+            document.getElementById('connection').classList.remove('connected');
+            document.getElementById('conn-text').innerText = "Offline";
+        };
+
+        function updateState(key, value) {
+            const payload = {};
+            payload[key] = value;
+            socket.send(JSON.stringify({ type: 'set_state', data: payload }));
+        }
+
+        function setEffect(name) {
+            updateState('effect', name);
+        }
+
+        function syncUI() {
+            document.getElementById('powerToggle').checked = appState.on;
+            document.getElementById('brightness').value = appState.brightness;
+            document.getElementById('speed').value = appState.speed;
+            document.getElementById('primary_color').value = appState.primary_color;
+            document.getElementById('audio_gain').value = appState.audio_gain || 5.0;
+            
+            document.querySelectorAll('.fx-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById('btn-' + appState.effect);
+            if(activeBtn) activeBtn.classList.add('active');
+        }
+
+        function drawVisualizer() {
+            const w = canvas.width;
+            const h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            const barWidth = w / vizBands.length;
+            const now = performance.now();
+            const beatFlash = now - lastBeat < 120;
+
+            for (let i = 0; i < vizBands.length; i++) {
+                vizBands[i] = vizBands[i] + (vizTargets[i] - vizBands[i]) * 0.25; // smoothing
+                const barHeight = Math.max(4, vizBands[i] * (h - 10));
+                const x = i * barWidth;
+                const y = h - barHeight;
+
+                const grad = ctx.createLinearGradient(x, y, x, h);
+                const glowColor = beatFlash ? '#ffffff' : '#00ffcc';
+                grad.addColorStop(0, '#ff00ff');
+                grad.addColorStop(0.5, '#00f0ff');
+                grad.addColorStop(1, glowColor);
+
+                ctx.fillStyle = grad;
+                ctx.shadowColor = beatFlash ? '#fff' : '#00ffcc';
+                ctx.shadowBlur = beatFlash ? 18 : 12;
+                ctx.fillRect(x + 6, y, barWidth - 12, barHeight);
+            }
+
+            requestAnimationFrame(drawVisualizer);
+        }
+
+        requestAnimationFrame(drawVisualizer);
+    </script>
+</body>
+</html>

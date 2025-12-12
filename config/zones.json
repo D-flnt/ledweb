@@ -1,0 +1,64 @@
+[
+  {
+    "name": "Volledige strip",
+    "start": 0,
+    "end": 299,
+    "effect": "spectrum_stream",
+    "params": {
+      "mirror": true,
+      "palette": "neon",
+      "span": 0,
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "secondary_color": [
+        255,
+        79,
+        216
+      ],
+      "density": 0.12,
+      "fade": 0.7,
+      "speed": 0.4,
+      "trail": 0.75,
+      "scale": 0.12,
+      "direction": "forward",
+      "interval": 0.7,
+      "pause": 0.4,
+      "frequency": 8,
+      "duty_cycle": 0.2,
+      "pulse": 0.4,
+      "intensity": 0.8,
+      "colors": [
+        [
+          255,
+          64,
+          100
+        ],
+        [
+          64,
+          180,
+          255
+        ],
+        [
+          255,
+          200,
+          40
+        ]
+      ],
+      "gap": 3,
+      "tail": 8,
+      "chance": 0.25,
+      "sparks": 0.2,
+      "amount": 0.3,
+      "count": 3,
+      "decay": 0.92,
+      "depth": 0.35,
+      "flash_ms": 80,
+      "wavelength": 24,
+      "sparkles": 0.08,
+      "blur": 0.6
+    }
+  }
+]

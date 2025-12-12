@@ -1,0 +1,94 @@
+{
+  "auth": {
+    "password": "raspi1"
+  },
+  "led": {
+    "count": 300,
+    "pin": 18,
+    "freq": 800000,
+    "dma": 10,
+    "invert": false,
+    "brightness": 128,
+    "channel": 0,
+    "strip_type": "ws281x",
+    "max_wattage": 100,
+    "max_current_ma": 20000
+  },
+  "state": {
+    "effect": "theater_chase",
+    "palette": "rainbow",
+    "speed": 1.0,
+    "intensity": 1.0,
+    "color": [
+      61,
+      255,
+      145
+    ],
+    "secondary_color": [
+      0,
+      0,
+      0
+    ],
+    "power_limit_watts": 100.0,
+    "brightness": 255,
+    "max_brightness": 255,
+    "music_mode": false,
+    "bpm": 0
+  },
+  "segments": [
+    {
+      "name": "Zone 1",
+      "start": 0,
+      "end": 29,
+      "effect": "theater_chase",
+      "color": [
+        61,
+        255,
+        145
+      ],
+      "speed": 1.0,
+      "intensity": 1.0
+    }
+  ],
+  "presets": [
+    {
+      "name": "Preset 1764631465926",
+      "state": {
+        "effect": "audio_bars",
+        "palette": "rainbow",
+        "speed": 1,
+        "intensity": 1,
+        "color": [
+          61,
+          255,
+          145
+        ],
+        "secondary_color": [
+          0,
+          0,
+          0
+        ],
+        "power_limit_watts": 100,
+        "brightness": 255,
+        "max_brightness": 255,
+        "music_mode": false,
+        "bpm": 0
+      },
+      "segments": []
+    }
+  ],
+  "schedules": [],
+  "theme": {
+    "accent": "#00f6ff",
+    "glass": true
+  },
+  "audio": {
+    "device": null,
+    "fft_size": 1024,
+    "sensitivity": 0.8,
+    "gain": 1,
+    "attack": 0.6,
+    "decay": 0.4,
+    "enabled": true
+  }
+}

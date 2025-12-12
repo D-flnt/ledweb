@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pi LED Controller</title>
+    <link rel="stylesheet" href="/frontend/style.css" />
+  </head>
+  <body>
+    <div class="background">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+      <div class="grid-overlay"></div>
+    </div>
+
+    <div id="auth-modal" class="auth-modal hidden">
+      <div class="auth-card">
+        <h2>Beveiligde toegang</h2>
+        <p class="muted" id="auth-message">Log in om de LED controller te gebruiken.</p>
+        <form id="auth-form">
+          <input id="auth-password" type="password" placeholder="Wachtwoord" autocomplete="current-password" required />
+          <button type="submit" class="btn full">Inloggen</button>
+        </form>
+        <button type="button" id="auth-logout" class="btn ghost small">Log uit</button>
+      </div>
+    </div>
+
+    <div id="app" class="page">
+      <header class="hero hero-visuals">
+        <div class="hero-text">
+          <p class="eyebrow">LED Controller Daan</p>
+          <h1>Realtime LED control & muziek</h1>
+          <p class="subtitle">
+            Live effecten en audio-reactieve visuals — direct te bedienen.
+          </p>
+          <div class="stats-row">
+            <span class="chip strong" id="stat-power">Status: --</span>
+            <span class="chip" id="stat-effect">Effect: --</span>
+            <span class="chip" id="stat-bright">Helderheid: --</span>
+            <span class="chip" id="bpm-chip">BPM: --</span>
+            <button id="kill-all" class="btn danger small">Alles uit</button>
+          </div>
+          <div class="quick-row">
+            <button class="btn ghost pill" data-quick="rainbow_cycle">Rainbow</button>
+            <button class="btn ghost pill" data-quick="aurora">Aurora</button>
+            <button class="btn ghost pill" data-quick="fire_audio">Fire Audio</button>
+            <button class="btn ghost pill" data-quick="strobe_on_beat">Strobe on Beat</button>
+            <button class="btn ghost pill" data-quick="spectrum_stream">Spectrum Stream</button>
+          </div>
+        </div>
+        <div class="hero-meter card">
+          <div class="mini-head">
+            <p class="muted">Audio snapshot</p>
+            <span class="chip ghost" id="volume-chip">Vol: 0%</span>
+          </div>
+          <canvas class="audio-canvas" id="audio-canvas" height="140"></canvas>
+          <div class="audio-inline">
+            <label>Audio-effect</label>
+            <select id="audio-effect" class="chip pill select-neon"></select>
+            <label>Gevoeligheid</label>
+            <input class="slider" id="audio-sens" type="range" min="0.1" max="12" step="0.1" value="4" />
+            <label>Smoothing</label>
+            <input class="slider" id="audio-smooth" type="range" min="0.05" max="0.95" step="0.05" value="0.35" />
+            <label>Beat-drempel</label>
+            <input class="slider" id="audio-beat" type="range" min="0.05" max="0.9" step="0.01" value="0.35" />
+            <button class="btn ghost small" id="audio-toggle">Uitschakelen</button>
+          </div>
+          <p class="muted tiny">Reageert live op inkomend geluid (met smoothing + beat flash)</p>
+        </div>
+        <div class="hero-meter card">
+          <div class="mini-head">
+            <p class="muted">LED visualisatie</p>
+            <span class="chip ghost">Strip output</span>
+          </div>
+          <canvas id="led-preview" class="led-preview" height="140"></canvas>
+          <p class="muted tiny">1:1 buffer preview (zelfde lengte, richting en smoothing).</p>
+        </div>
+      </header>
+
+      <section class="grid two">
+        <div class="card lift">
+          <div class="card-header">
+            <div>
+              <h2>Effecten</h2>
+              <p class="muted">Kies een stijl en pas parameters aan</p>
+            </div>
+            <div class="header-actions">
+              <select id="effect-sort" class="chip pill select-neon">
+                <option value="name-asc">A-Z</option>
+                <option value="name-desc">Z-A</option>
+                <option value="category">Categorie</option>
+                <option value="music-first">Muziek eerst</option>
+              </select>
+              <select id="effect-filter" class="chip pill select-neon"></select>
+              <button
+                class="btn ghost small collapse-toggle"
+                data-collapse="#effects-panel"
+                data-label-open="Effecten uitklappen"
+                data-label-close="Effecten inklappen"
+              >
+                Effecten inklappen
+              </button>
+            </div>
+          </div>
+          <div id="effects-panel" class="collapsible-content">
+            <div class="effects-pane">
+              <div id="effects-list" class="effect-list effects-scroll"></div>
+              <div class="card inner sticky-params">
+              <div class="card-header">
+                <div>
+                  <h3>Effect-parameters</h3>
+                  <p class="muted">Per-effect parameters, kleuren en trails</p>
+                </div>
+              </div>
+              <div id="effect-params-wrap" class="collapsible-content">
+                <div id="effect-params" class="param-grid"></div>
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card lift">
+          <div class="card-header">
+            <div>
+              <h2>Live besturing</h2>
+              <p class="muted">Globale helderheid, tempo, gamma en richting</p>
+            </div>
+            <div class="btn-group">
+              <button id="power-btn" class="btn ghost">Aan / Uit</button>
+              <button id="effect-toggle" class="btn ghost">Stop effect</button>
+            </div>
+          </div>
+          <div class="live-presets">
+            <button id="live-reset" class="btn ghost small">Reset sliders</button>
+            <div class="chip-row">
+              <button class="chip pill live-preset" data-live-preset="calm">Rustig</button>
+              <button class="chip pill live-preset" data-live-preset="bright">Helder</button>
+              <button class="chip pill live-preset" data-live-preset="party">Party</button>
+            </div>
+          </div>
+          <div class="controls">
+            <label>Helderheid <span id="brightness-val">0</span></label>
+            <input class="slider" id="brightness" type="range" min="0" max="255" value="180" />
+
+            <div class="split">
+              <div>
+                <label>Intensiteit boost <span id="intensity-boost-val">1.0x</span></label>
+                <input class="slider" id="intensity-boost" type="range" min="0.5" max="3" step="0.05" value="1" />
+              </div>
+              <div>
+                <label>Doel FPS <span id="fps-val">60</span></label>
+                <input class="slider" id="fps" type="range" min="20" max="120" step="5" value="60" />
+              </div>
+              <div>
+                <label>Actieve leds <span id="max-leds-val">0</span></label>
+                <input class="slider" id="max-leds" type="range" min="1" max="300" step="1" value="300" />
+              </div>
+            </div>
+            <div class="split">
+              <div>
+                <label>Master tempo <span id="live-speed-val">1.0x</span></label>
+                <input class="slider" id="live-speed" type="range" min="0" max="8" step="0.05" value="1" />
+              </div>
+              <div>
+                <label>Frame smoothing <span id="live-smoothing-val">0.15</span></label>
+                <input class="slider" id="live-smoothing" type="range" min="0" max="1" step="0.02" value="0.15" />
+              </div>
+              <div>
+                <label>Global gamma <span id="live-gamma-val">1.0</span></label>
+                <input class="slider" id="live-gamma" type="range" min="0.3" max="2.5" step="0.05" value="1" />
+              </div>
+            </div>
+            <div class="split">
+              <div>
+                <label>Dither <span id="live-fade-val">0.30</span></label>
+                <input class="slider" id="live-fade" type="range" min="0" max="1" step="0.02" value="0.3" />
+              </div>
+              <div>
+                <label>Richting</label>
+                <select id="live-direction" class="chip pill select-neon">
+                  <option value="forward">Vooruit</option>
+                  <option value="reverse">Achteruit</option>
+                  <option value="center">Midden</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="split">
+              <div>
+                <label>Primaire kleur</label>
+                <input id="color" type="color" value="#32ffe0" />
+            <div class="color-swatches">
+              <span class="swatch" data-color="#ffffff" title="Helder wit"></span>
+              <span class="swatch" data-color="#ffd18b" title="Warm wit"></span>
+              <span class="swatch" data-color="#63e6ff" title="IJsblauw"></span>
+              <span class="swatch" data-color="#ff61d6" title="Neon roze"></span>
+            </div>
+          </div>
+        </div>
+        <div class="preset-block">
+          <div class="subhead">
+            <h3>Effect-presets</h3>
+            <select id="preset-effect-select" class="chip pill select-neon small"></select>
+          </div>
+          <div id="preset-chips" class="preset-chips"></div>
+          <p class="muted tiny" id="preset-hint">Kies een preset voor het huidige effect of toon alle presets.</p>
+        </div>
+        <div class="color-edit">
+          <div class="subhead">
+            <h3>Geavanceerde kleur (HSV/RGB)</h3>
+            <button
+              class="btn ghost small collapse-toggle"
+                  data-collapse="#advanced-color"
+                  data-default="collapsed"
+                  data-label-open="Geavanceerd tonen"
+                  data-label-close="Geavanceerd verbergen"
+                >
+                  Geavanceerd tonen
+                </button>
+              </div>
+              <div id="advanced-color" class="collapsible-content collapsed">
+                <div>
+                  <h4>Primaire HSV/RGB</h4>
+                  <div class="split tiny-grid">
+                    <div><label>H</label><input id="h-primary" type="number" min="0" max="360" value="170"></div>
+                    <div><label>S</label><input id="s-primary" type="number" min="0" max="100" value="100"></div>
+                    <div><label>V</label><input id="v-primary" type="number" min="0" max="100" value="100"></div>
+                    <div><label>R</label><input id="r-primary" type="number" min="0" max="255" value="50"></div>
+                    <div><label>G</label><input id="g-primary" type="number" min="0" max="255" value="255"></div>
+                    <div><label>B</label><input id="b-primary" type="number" min="0" max="255" value="224"></div>
+                  </div>
+                </div>
+                <div>
+                  <h4>Secundaire HSV/RGB</h4>
+                  <div class="split tiny-grid">
+                    <div><label>H</label><input id="h-secondary" type="number" min="0" max="360" value="320"></div>
+                    <div><label>S</label><input id="s-secondary" type="number" min="0" max="100" value="100"></div>
+                    <div><label>V</label><input id="v-secondary" type="number" min="0" max="100" value="100"></div>
+                    <div><label>R</label><input id="r-secondary" type="number" min="0" max="255" value="255"></div>
+                    <div><label>G</label><input id="g-secondary" type="number" min="0" max="255" value="79"></div>
+                    <div><label>B</label><input id="b-secondary" type="number" min="0" max="255" value="216"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid two">
+        <div class="card lift">
+          <div class="card-header">
+            <div>
+              <h2>Thema & Back-up</h2>
+              <p class="muted">Snelle themawissel + import/export</p>
+            </div>
+          </div>
+          <div class="theme-row">
+            <label>Thema</label>
+            <select id="theme-select" class="chip pill select-neon"></select>
+          </div>
+          <div class="theme-actions">
+            <button id="theme-duplicate" class="btn ghost small">Dupliceer</button>
+            <button id="theme-rename" class="btn ghost small">Hernoem</button>
+            <button id="theme-export" class="btn ghost small">Exporteer thema’s</button>
+            <button id="theme-import-btn" class="btn ghost small">Importeer thema’s</button>
+            <input id="theme-import" type="file" accept="application/json" class="hidden-input" />
+          </div>
+          <div class="backup-actions">
+            <button id="backup-export" class="btn">Export back-up</button>
+            <button id="backup-import-btn" class="btn ghost">Import back-up</button>
+            <input id="backup-import" type="file" accept="application/json" class="hidden-input" />
+          </div>
+          <p class="muted tiny">Back-up bevat presets, zones, UI en thema’s (JSON). Import merge/overwrite automatisch.</p>
+        </div>
+      </section>
+
+      <section class="grid one">
+        <div class="card lift">
+          <div class="card-header">
+            <div>
+              <h2>Wekkers & Timers</h2>
+              <p class="muted">Plan scènes vooruit</p>
+            </div>
+            <div class="btn-group">
+              <button id="add-alarm" class="btn ghost">Wekker toevoegen</button>
+              <button id="add-timer" class="btn ghost">Timer toevoegen</button>
+            </div>
+          </div>
+          <div id="alarms-list" class="list"></div>
+        </div>
+      </section>
+    </div>
+
+    <script src="/frontend/app.js"></script>
+  </body>
+</html>

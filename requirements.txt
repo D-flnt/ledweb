@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+numpy
+pyaudio
+rpi_ws281x

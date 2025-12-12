@@ -1,0 +1,8 @@
+{
+  "name": "Pi LED Controller",
+  "accent": "#32ffe0",
+  "ui_scale": "normaal",
+  "glass": true,
+  "default_preset": "Neon Regenboog",
+  "speed_multiplier": 1
+}

@@ -1,0 +1,17 @@
+[Unit]
+Description=Pi LED Controller (FastAPI + rpi_ws281x)
+After=network.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi
+Environment=PYTHONUNBUFFERED=1
+Environment=LED_HW=1
+ExecStart=/home/pi/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
