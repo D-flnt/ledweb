@@ -1,6 +1,8 @@
 import math
+import os
 import threading
 import time
+from contextlib import contextmanager
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -9,6 +11,19 @@ try:
     import pyaudio
 except Exception:  # pragma: no cover - runtime fallback
     pyaudio = None
+
+
+@contextmanager
+def _suppress_alsa() -> None:
+    """Temporarily silence ALSA stderr noise while probing devices."""
+    fd = os.dup(2)
+    try:
+        with open(os.devnull, "w") as devnull:
+            os.dup2(devnull.fileno(), 2)
+            yield
+    finally:
+        os.dup2(fd, 2)
+        os.close(fd)
 
 
 class AudioEngine:
@@ -37,6 +52,8 @@ class AudioEngine:
         self.beat_threshold = 0.35
         self.enabled = True
         self._agc_gain = 1.0
+        self._input_device_index: Optional[int] = None
+        self._error: Optional[str] = None
         self._agc_ref = 2_000_000.0
         self.agc_target = 0.85
         self._fast_alpha = 0.6
@@ -57,44 +74,105 @@ class AudioEngine:
         return {"gain": self.gain, "smoothing": self.alpha, "beat_threshold": self.beat_threshold, "enabled": self.enabled}
 
     def start(self) -> None:
-        if self.running or pyaudio is None:
+        if self.running:
             return
+        if pyaudio is None:
+            self._disable_audio("PyAudio not available")
+            return
+        device_index = self._find_input_device()
+        if device_index is None:
+            self._disable_audio("No audio input device detected")
+            return
+        self._input_device_index = device_index
         self.running = True
-        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread = threading.Thread(target=self._loop, args=(device_index,), daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
         self.running = False
         if self._thread:
             self._thread.join(timeout=1)
-        if self._stream:
-            self._stream.stop_stream()
-            self._stream.close()
-        if self._pa:
-            self._pa.terminate()
+        self._cleanup_audio()
 
-    def _open_stream(self):
-        self._pa = pyaudio.PyAudio()
-        device_index = None
-        for i in range(self._pa.get_device_count()):
-            info = self._pa.get_device_info_by_index(i)
-            if info.get("maxInputChannels", 0) > 0:
-                device_index = i
-                break
-        self._stream = self._pa.open(
-            format=pyaudio.paInt16,
-            channels=1,
-            rate=self.rate,
-            input=True,
-            frames_per_buffer=self.chunk,
-            input_device_index=device_index,
-        )
-
-    def _loop(self) -> None:
+    def _find_input_device(self, pa_obj: Optional["pyaudio.PyAudio"] = None) -> Optional[int]:
+        if pyaudio is None:
+            return None
+        owns_instance = False
+        if pa_obj is None:
+            owns_instance = True
+            with _suppress_alsa():
+                pa_obj = pyaudio.PyAudio()
         try:
-            self._open_stream()
-        except Exception:
-            self.running = False
+            with _suppress_alsa():
+                count = pa_obj.get_device_count()
+            for i in range(count):
+                with _suppress_alsa():
+                    info = pa_obj.get_device_info_by_index(i)
+                if info.get("maxInputChannels", 0) > 0:
+                    return i
+            return None
+        finally:
+            if owns_instance and pa_obj:
+                with _suppress_alsa():
+                    pa_obj.terminate()
+
+    def _open_stream(self, device_index: Optional[int]) -> None:
+        with _suppress_alsa():
+            self._pa = pyaudio.PyAudio()
+        if device_index is None:
+            device_index = self._find_input_device(self._pa)
+        if device_index is None:
+            raise RuntimeError("No audio input available")
+        with _suppress_alsa():
+            self._stream = self._pa.open(
+                format=pyaudio.paInt16,
+                channels=1,
+                rate=self.rate,
+                input=True,
+                frames_per_buffer=self.chunk,
+                input_device_index=device_index,
+            )
+
+    def _cleanup_audio(self) -> None:
+        if self._stream:
+            try:
+                with _suppress_alsa():
+                    self._stream.stop_stream()
+            finally:
+                with _suppress_alsa():
+                    self._stream.close()
+            self._stream = None
+        if self._pa:
+            with _suppress_alsa():
+                self._pa.terminate()
+            self._pa = None
+
+    def _disable_audio(self, reason: str) -> None:
+        self.enabled = False
+        self.running = False
+        self._error = reason
+        self.snapshot = {
+            "bands": [0.0] * 8,
+            "vol": 0.0,
+            "beat": False,
+            "bpm": 0.0,
+            "gain": self.gain,
+            "smoothing": self.alpha,
+            "beat_threshold": self.beat_threshold,
+            "enabled": False,
+            "flux": 0.0,
+            "rms": 0.0,
+            "bass": 0.0,
+            "agc_gain": self._agc_gain,
+            "error": reason,
+        }
+
+    def _loop(self, device_index: Optional[int] = None) -> None:
+        try:
+            self._open_stream(device_index)
+        except Exception as exc:
+            self._cleanup_audio()
+            self._disable_audio(f"Audio disabled: {exc}")
             return
         window = np.hanning(self.chunk)
         freqs = np.fft.rfftfreq(self.chunk, 1.0 / self.rate)
@@ -178,6 +256,7 @@ class AudioEngine:
                 "bass": bass_level if self.enabled else 0.0,
                 "agc_gain": self._agc_gain,
             }
+        self._cleanup_audio()
 
     def _detect_beat(self, flux: float, bass: float, now: float) -> bool:
         history = self._flux_history[-24:]

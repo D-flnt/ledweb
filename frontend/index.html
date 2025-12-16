@@ -55,6 +55,11 @@
             <span class="chip ghost" id="volume-chip">Vol: 0%</span>
           </div>
           <canvas class="audio-canvas" id="audio-canvas" height="140"></canvas>
+          <div class="chip-row">
+            <button class="chip pill" data-audio-preset="calm">Audio preset: Calm</button>
+            <button class="chip pill" data-audio-preset="club">Audio preset: Club</button>
+            <button class="chip pill" data-audio-preset="live">Audio preset: Live</button>
+          </div>
           <div class="audio-inline">
             <label>Audio-effect</label>
             <select id="audio-effect" class="chip pill select-neon"></select>
@@ -86,6 +91,7 @@
               <p class="muted">Kies een stijl en pas parameters aan</p>
             </div>
             <div class="header-actions">
+              <input id="effect-search" class="chip pill select-neon" type="search" placeholder="Zoek effect..." />
               <select id="effect-sort" class="chip pill select-neon">
                 <option value="name-asc">A-Z</option>
                 <option value="name-desc">Z-A</option>
@@ -112,6 +118,7 @@
                   <h3>Effect-parameters</h3>
                   <p class="muted">Per-effect parameters, kleuren en trails</p>
                 </div>
+                <button class="btn ghost small" id="save-effect-preset">Preset opslaan</button>
               </div>
               <div id="effect-params-wrap" class="collapsible-content">
                 <div id="effect-params" class="param-grid"></div>
@@ -141,49 +148,103 @@
             </div>
           </div>
           <div class="controls">
-            <label>Helderheid <span id="brightness-val">0</span></label>
-            <input class="slider" id="brightness" type="range" min="0" max="255" value="180" />
+            <div class="accordion">
+              <button class="accordion-toggle" data-collapse="#live-brightness" data-label-open="Helderheid" data-label-close="Helderheid">
+                Helderheid
+              </button>
+              <div id="live-brightness" class="collapsible-content">
+                <label class="slider-label">
+                  Helderheid <span id="brightness-val">0</span>
+                  <span class="slider-tooltip" data-tooltip-for="brightness"></span>
+                  <button class="reset-btn" type="button" data-reset="brightness" title="Reset naar default">↺</button>
+                </label>
+                <input class="slider" id="brightness" type="range" min="0" max="255" value="180" />
+                <input class="number" id="brightness-num" type="number" min="0" max="255" value="180" />
 
-            <div class="split">
-              <div>
-                <label>Intensiteit boost <span id="intensity-boost-val">1.0x</span></label>
-                <input class="slider" id="intensity-boost" type="range" min="0.5" max="3" step="0.05" value="1" />
+                <div class="split">
+                  <div>
+                    <label class="slider-label">
+                      Intensiteit boost <span id="intensity-boost-val">1.0x</span>
+                      <span class="slider-tooltip" data-tooltip-for="intensity-boost"></span>
+                      <button class="reset-btn" type="button" data-reset="intensity-boost" title="Reset">↺</button>
+                    </label>
+                    <input class="slider" id="intensity-boost" type="range" min="0.5" max="3" step="0.05" value="1" />
+                    <input class="number" id="intensity-boost-num" type="number" min="0.5" max="3" step="0.05" value="1" />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label>Doel FPS <span id="fps-val">60</span></label>
-                <input class="slider" id="fps" type="range" min="20" max="120" step="5" value="60" />
+
+              <button class="accordion-toggle" data-collapse="#live-tempo" data-label-open="Tempo" data-label-close="Tempo">
+                Tempo
+              </button>
+              <div id="live-tempo" class="collapsible-content">
+                <div class="split">
+                  <div>
+                    <label class="slider-label">
+                      Doel FPS <span id="fps-val">60</span>
+                      <span class="slider-tooltip" data-tooltip-for="fps"></span>
+                      <button class="reset-btn" type="button" data-reset="fps" title="Reset">↺</button>
+                    </label>
+                    <input class="slider" id="fps" type="range" min="20" max="120" step="5" value="60" />
+                    <input class="number" id="fps-num" type="number" min="20" max="120" step="1" value="60" />
+                  </div>
+                  <div>
+                    <label class="slider-label">
+                      Master tempo <span id="live-speed-val">1.0x</span>
+                      <span class="slider-tooltip" data-tooltip-for="live-speed"></span>
+                      <button class="reset-btn" type="button" data-reset="live-speed" title="Reset">↺</button>
+                    </label>
+                    <input class="slider" id="live-speed" type="range" min="0" max="8" step="0.05" value="1" />
+                    <input class="number" id="live-speed-num" type="number" min="0" max="8" step="0.05" value="1" />
+                  </div>
+                </div>
+                <div class="split">
+                  <div>
+                    <label class="slider-label">
+                      Frame smoothing <span id="live-smoothing-val">0.15</span>
+                      <span class="slider-tooltip" data-tooltip-for="live-smoothing"></span>
+                      <button class="reset-btn" type="button" data-reset="live-smoothing" title="Reset">↺</button>
+                    </label>
+                    <input class="slider" id="live-smoothing" type="range" min="0" max="1" step="0.02" value="0.15" />
+                    <input class="number" id="live-smoothing-num" type="number" min="0" max="1" step="0.02" value="0.15" />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label>Actieve leds <span id="max-leds-val">0</span></label>
-                <input class="slider" id="max-leds" type="range" min="1" max="300" step="1" value="300" />
-              </div>
-            </div>
-            <div class="split">
-              <div>
-                <label>Master tempo <span id="live-speed-val">1.0x</span></label>
-                <input class="slider" id="live-speed" type="range" min="0" max="8" step="0.05" value="1" />
-              </div>
-              <div>
-                <label>Frame smoothing <span id="live-smoothing-val">0.15</span></label>
-                <input class="slider" id="live-smoothing" type="range" min="0" max="1" step="0.02" value="0.15" />
-              </div>
-              <div>
-                <label>Global gamma <span id="live-gamma-val">1.0</span></label>
-                <input class="slider" id="live-gamma" type="range" min="0.3" max="2.5" step="0.05" value="1" />
-              </div>
-            </div>
-            <div class="split">
-              <div>
-                <label>Dither <span id="live-fade-val">0.30</span></label>
-                <input class="slider" id="live-fade" type="range" min="0" max="1" step="0.02" value="0.3" />
-              </div>
-              <div>
-                <label>Richting</label>
-                <select id="live-direction" class="chip pill select-neon">
-                  <option value="forward">Vooruit</option>
-                  <option value="reverse">Achteruit</option>
-                  <option value="center">Midden</option>
-                </select>
+
+              <button class="accordion-toggle" data-collapse="#live-gamma" data-label-open="Gamma &amp; Dither" data-label-close="Gamma &amp; Dither">
+                Gamma &amp; Dither
+              </button>
+              <div id="live-gamma" class="collapsible-content">
+                <div class="split">
+                  <div>
+                    <label class="slider-label">
+                      Global gamma <span id="live-gamma-val">1.0</span>
+                      <span class="slider-tooltip" data-tooltip-for="live-gamma"></span>
+                      <button class="reset-btn" type="button" data-reset="live-gamma" title="Reset">↺</button>
+                    </label>
+                    <input class="slider" id="live-gamma" type="range" min="0.3" max="2.5" step="0.05" value="1" />
+                    <input class="number" id="live-gamma-num" type="number" min="0.3" max="2.5" step="0.05" value="1" />
+                  </div>
+                  <div>
+                    <label class="slider-label">
+                      Dither <span id="live-fade-val">0.30</span>
+                      <span class="slider-tooltip" data-tooltip-for="live-fade"></span>
+                      <button class="reset-btn" type="button" data-reset="live-fade" title="Reset">↺</button>
+                    </label>
+                    <input class="slider" id="live-fade" type="range" min="0" max="1" step="0.02" value="0.3" />
+                    <input class="number" id="live-fade-num" type="number" min="0" max="1" step="0.02" value="0.3" />
+                  </div>
+                </div>
+                <div class="split">
+                  <div>
+                    <label>Richting</label>
+                    <select id="live-direction" class="chip pill select-neon">
+                      <option value="forward">Vooruit</option>
+                      <option value="reverse">Achteruit</option>
+                      <option value="center">Midden</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -191,14 +252,22 @@
               <div>
                 <label>Primaire kleur</label>
                 <input id="color" type="color" value="#32ffe0" />
-            <div class="color-swatches">
-              <span class="swatch" data-color="#ffffff" title="Helder wit"></span>
-              <span class="swatch" data-color="#ffd18b" title="Warm wit"></span>
-              <span class="swatch" data-color="#63e6ff" title="IJsblauw"></span>
-              <span class="swatch" data-color="#ff61d6" title="Neon roze"></span>
+                <div class="color-swatches">
+                  <span class="swatch" data-color="#ffffff" title="Helder wit"></span>
+                  <span class="swatch" data-color="#ffd18b" title="Warm wit"></span>
+                  <span class="swatch" data-color="#63e6ff" title="IJsblauw"></span>
+                  <span class="swatch" data-color="#ff61d6" title="Neon roze"></span>
+                </div>
+              </div>
+            </div>
+            <div class="split">
+              <div>
+                <label>Actieve leds <span id="max-leds-val">0</span></label>
+                <input class="number" id="max-leds" type="number" min="1" max="300" step="1" value="300" />
+              </div>
             </div>
           </div>
-        </div>
+
         <div class="preset-block">
           <div class="subhead">
             <h3>Effect-presets</h3>
@@ -253,27 +322,22 @@
         <div class="card lift">
           <div class="card-header">
             <div>
-              <h2>Thema & Back-up</h2>
-              <p class="muted">Snelle themawissel + import/export</p>
+              <h2>Presets</h2>
+              <p class="muted">Sla de huidige LED-state op en laad hem later</p>
             </div>
           </div>
           <div class="theme-row">
-            <label>Thema</label>
-            <select id="theme-select" class="chip pill select-neon"></select>
+            <label>Presetnaam</label>
+            <input id="preset-name-input" class="chip pill select-neon" type="text" placeholder="Bijv. Party Mode" />
+            <button id="preset-save-btn" class="btn">Preset opslaan</button>
           </div>
-          <div class="theme-actions">
-            <button id="theme-duplicate" class="btn ghost small">Dupliceer</button>
-            <button id="theme-rename" class="btn ghost small">Hernoem</button>
-            <button id="theme-export" class="btn ghost small">Exporteer thema’s</button>
-            <button id="theme-import-btn" class="btn ghost small">Importeer thema’s</button>
-            <input id="theme-import" type="file" accept="application/json" class="hidden-input" />
+          <div class="preset-block">
+            <div class="subhead">
+              <h3>Alle presets</h3>
+            </div>
+            <div id="all-presets" class="preset-chips"></div>
+            <p class="muted tiny">Presets bewaren effect, kleuren, live-instellingen, helderheid en segmenten.</p>
           </div>
-          <div class="backup-actions">
-            <button id="backup-export" class="btn">Export back-up</button>
-            <button id="backup-import-btn" class="btn ghost">Import back-up</button>
-            <input id="backup-import" type="file" accept="application/json" class="hidden-input" />
-          </div>
-          <p class="muted tiny">Back-up bevat presets, zones, UI en thema’s (JSON). Import merge/overwrite automatisch.</p>
         </div>
       </section>
 

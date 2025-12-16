@@ -70,6 +70,12 @@ function loadUserThemes() {
 
 let userThemes = loadUserThemes();
 const defaultLive = { master_speed: 1, frame_blend: 0.15, gamma: 1, direction: "forward", dither: true, dither_strength: 0.3 };
+let lastBrightnessBeforeKill = null;
+const audioPresets = {
+  calm: { gain: 3, smoothing: 0.5, beat_threshold: 0.45 },
+  club: { gain: 5.5, smoothing: 0.25, beat_threshold: 0.28 },
+  live: { gain: 4.2, smoothing: 0.35, beat_threshold: 0.35 },
+};
 function ensureLive() {
   state.current.live = { ...defaultLive, ...(state.current.live || {}) };
   return state.current.live;
@@ -151,6 +157,11 @@ function updateSliderFill(el) {
   el.style.setProperty("--percent", pct);
 }
 
+function updateSliderTooltip(id, value) {
+  const tip = document.querySelector(`.slider-tooltip[data-tooltip-for="${id.replace("#", "")}"]`);
+  if (tip) tip.textContent = value;
+}
+
 function enhanceSlider(el) {
   if (!el || el.dataset.enhanced) return;
   registerDragGuard(el);
@@ -167,6 +178,32 @@ function enhanceSlider(el) {
 }
 
 const qs = (sel) => document.querySelector(sel);
+function syncSliderNumber(sliderId, numberId, onChange) {
+  const slider = qs(sliderId);
+  const number = qs(numberId);
+  if (!slider || !number) return;
+  enhanceSlider(slider);
+  const clampInput = (el, val) => {
+    const min = parseFloat(el.min || "-Infinity");
+    const max = parseFloat(el.max || "Infinity");
+    const step = parseFloat(el.step || "0") || null;
+    let v = Number(val);
+    if (Number.isNaN(v)) v = min;
+    v = Math.min(max, Math.max(min, v));
+    if (step) v = Math.round(v / step) * step;
+    return v;
+  };
+  const setBoth = (val, from) => {
+    if (from !== "slider") slider.value = val;
+    if (from !== "number") number.value = val;
+    updateSliderFill(slider);
+    updateSliderTooltip(sliderId, val);
+    onChange(val);
+  };
+  slider.addEventListener("input", () => setBoth(clampInput(slider, slider.value), "slider"));
+  number.addEventListener("input", () => setBoth(clampInput(number, number.value), "number"));
+  setBoth(clampInput(slider, slider.value), null);
+}
 let playlistTimer = null;
 let playlistActive = false;
 let playlistBusy = false;
@@ -206,6 +243,12 @@ function hideAuth() {
   if (modal) modal.classList.add("hidden");
 }
 
+function forceReauth(message = "Sessie verlopen, log opnieuw in.") {
+  state.token = "";
+  localStorage.removeItem("led_token");
+  showAuth(message);
+}
+
 async function api(path, method = "GET", body, opts = {}) {
   const res = await fetch(path, {
     method,
@@ -215,6 +258,9 @@ async function api(path, method = "GET", body, opts = {}) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401 || res.status === 403) {
+    forceReauth("Sessie verlopen of ongeldig. Log opnieuw in.");
+  }
   if (!res.ok) {
     const msg = await res.text();
     const err = new Error(msg || "Request failed");
@@ -254,6 +300,7 @@ async function loadStatus() {
   startVizLoops();
   connectWs();
   renderEffectPresets();
+  renderAllPresets();
 }
 
 function connectWs() {
@@ -281,10 +328,8 @@ function connectWs() {
     ws.send("ok");
   };
   ws.onclose = (evt) => {
-    if (evt.code === 4401 || evt.code === 1008) {
-      state.token = "";
-      localStorage.removeItem("led_token");
-      showAuth("Sessie verlopen, log opnieuw in.");
+    if (evt.code === 4401 || evt.code === 4403 || evt.code === 1008 || evt.code === 403) {
+      forceReauth("Sessie verlopen, log opnieuw in.");
       return;
     }
     setTimeout(connectWs, 2000);
@@ -317,15 +362,112 @@ function deriveSpeedMultiplier() {
   return clampNumber(live.master_speed ?? 1, 0, 8);
 }
 
+function resetControl(key) {
+  if (!liveDefaults) captureLiveDefaults();
+  const def = liveDefaults || {};
+  const live = ensureLive();
+  const ledTotal = state.hardware?.led_count || ((state.current.segments?.[0]?.end ?? 299) + 1);
+  const applyDual = (id, val) => {
+    const slider = qs(`#${id}`);
+    const num = qs(`#${id}-num`);
+    if (slider) {
+      slider.value = val;
+      updateSliderFill(slider);
+    }
+    if (num) num.value = val;
+    updateSliderTooltip(`#${id}`, val);
+  };
+  switch (key) {
+    case "brightness": {
+      const val = clampNumber(def.brightness ?? 180, 0, 255);
+      state.current.brightness = val;
+      applyDual("brightness", val);
+      qs("#brightness-val").textContent = val;
+      pushState({ brightness: val });
+      updateStats();
+      break;
+    }
+    case "intensity-boost": {
+      const val = clampNumber(def.intensity_boost ?? 1, 0.5, 3);
+      state.current.intensity_boost = val;
+      applyDual("intensity-boost", val);
+      qs("#intensity-boost-val").textContent = `${val.toFixed(2)}x`;
+      pushState({ intensity_boost: val });
+      break;
+    }
+    case "max-leds": {
+      const fallback = state.current.max_leds ?? ledTotal;
+      const val = clampNumber(def.max_leds ?? fallback, 1, ledTotal);
+      state.current.max_leds = val;
+      const input = qs("#max-leds");
+      if (input) input.value = val;
+      qs("#max-leds-val").textContent = `${val} leds`;
+      pushState({ max_leds: val });
+      break;
+    }
+    case "fps": {
+      const val = clampNumber(def.fps ?? 60, 20, 240);
+      state.current.fps = val;
+      applyDual("fps", val);
+      qs("#fps-val").textContent = `${val} fps`;
+      pushState({ fps: val });
+      break;
+    }
+    case "live-speed": {
+      const val = clampNumber(def.live?.master_speed ?? 1, 0, 8);
+      live.master_speed = val;
+      state.current.live = live;
+      applyDual("live-speed", val);
+      qs("#live-speed-val").textContent = `${val.toFixed(2)}x`;
+      pushState({ live });
+      break;
+    }
+    case "live-smoothing": {
+      const val = clampNumber(def.live?.frame_blend ?? def.live?.smoothing ?? 0.15, 0, 1);
+      live.frame_blend = val;
+      live.smoothing = val;
+      state.current.live = live;
+      applyDual("live-smoothing", val);
+      qs("#live-smoothing-val").textContent = val.toFixed(2);
+      pushState({ live });
+      break;
+    }
+    case "live-gamma": {
+      const val = clampNumber(def.live?.gamma ?? 1, 0.3, 2.5);
+      live.gamma = val;
+      state.current.live = live;
+      applyDual("live-gamma", val);
+      qs("#live-gamma-val").textContent = val.toFixed(2);
+      pushState({ live });
+      break;
+    }
+    case "live-fade": {
+      const val = clampNumber(def.live?.dither_strength ?? 0.3, 0, 1);
+      live.dither_strength = val;
+      live.dither = val > 0.05;
+      state.current.live = live;
+      applyDual("live-fade", val);
+      qs("#live-fade-val").textContent = val.toFixed(2);
+      pushState({ live });
+      break;
+    }
+    default:
+      break;
+  }
+}
+
 function setUiValues() {
   if (!dragging.has("#brightness")) qs("#brightness").value = state.current.brightness ?? 180;
   qs("#brightness-val").textContent = state.current.brightness ?? 180;
+  updateSliderTooltip("#brightness", state.current.brightness ?? 180);
+  const brightNum = qs("#brightness-num");
+  if (brightNum && !dragging.has("#brightness")) brightNum.value = state.current.brightness ?? 180;
   const ledTotal = state.hardware?.led_count || ((state.current.segments?.[0]?.end ?? 299) + 1);
   const maxLedInput = qs("#max-leds");
   if (maxLedInput) {
     maxLedInput.max = ledTotal;
     const val = clampNumber(state.current.max_leds ?? ledTotal, 1, ledTotal);
-    if (!dragging.has("#max-leds")) maxLedInput.value = val;
+    maxLedInput.value = val;
     qs("#max-leds-val").textContent = `${val} leds`;
   }
   const boostInput = qs("#intensity-boost");
@@ -333,12 +475,18 @@ function setUiValues() {
   if (boostInput) {
     if (!dragging.has("#intensity-boost")) boostInput.value = boostVal;
     qs("#intensity-boost-val").textContent = `${boostVal.toFixed(2)}x`;
+    updateSliderTooltip("#intensity-boost", boostVal);
+    const boostNum = qs("#intensity-boost-num");
+    if (boostNum && !dragging.has("#intensity-boost")) boostNum.value = boostVal;
   }
   const fpsInput = qs("#fps");
   const fpsVal = state.current.fps ?? 60;
   if (fpsInput) {
     if (!dragging.has("#fps")) fpsInput.value = fpsVal;
     qs("#fps-val").textContent = `${fpsVal} fps`;
+    updateSliderTooltip("#fps", fpsVal);
+    const fpsNum = qs("#fps-num");
+    if (fpsNum && !dragging.has("#fps")) fpsNum.value = fpsVal;
   }
   const live = ensureLive();
   const params = getEffectParams();
@@ -355,18 +503,30 @@ function setUiValues() {
   if (speedInput) {
     if (!dragging.has("#live-speed")) speedInput.value = speedMult;
     qs("#live-speed-val").textContent = `${speedMult.toFixed(2)}x`;
+    updateSliderTooltip("#live-speed", speedMult);
+    const speedNum = qs("#live-speed-num");
+    if (speedNum && !dragging.has("#live-speed")) speedNum.value = speedMult;
   }
   if (qs("#live-smoothing")) {
     if (!dragging.has("#live-smoothing")) qs("#live-smoothing").value = smoothingVal;
     qs("#live-smoothing-val").textContent = smoothingVal.toFixed(2);
+    updateSliderTooltip("#live-smoothing", smoothingVal);
+    const smNum = qs("#live-smoothing-num");
+    if (smNum && !dragging.has("#live-smoothing")) smNum.value = smoothingVal;
   }
   if (qs("#live-gamma")) {
     if (!dragging.has("#live-gamma")) qs("#live-gamma").value = gammaVal;
     qs("#live-gamma-val").textContent = gammaVal.toFixed(2);
+    updateSliderTooltip("#live-gamma", gammaVal);
+    const gammaNum = qs("#live-gamma-num");
+    if (gammaNum && !dragging.has("#live-gamma")) gammaNum.value = gammaVal;
   }
   if (qs("#live-fade")) {
     if (!dragging.has("#live-fade")) qs("#live-fade").value = ditherVal;
     qs("#live-fade-val").textContent = ditherVal.toFixed(2);
+    updateSliderTooltip("#live-fade", ditherVal);
+    const fadeNum = qs("#live-fade-num");
+    if (fadeNum && !dragging.has("#live-fade")) fadeNum.value = ditherVal;
   }
   if (qs("#live-direction")) qs("#live-direction").value = dirVal;
   qs("#color").value = rgbToHex(params.color || [50, 255, 224]);
@@ -962,6 +1122,8 @@ function updateStats() {
   if (eff) eff.textContent = `Effect: ${effectTitle(state.current.effect) || "--"}`;
   const bright = qs("#stat-bright");
   if (bright) bright.textContent = `Helderheid: ${state.current.brightness ?? 0}`;
+  const kill = qs("#kill-all");
+  if (kill) kill.textContent = state.current.on && (state.current.brightness ?? 0) > 0 ? "Alles uit" : "Alles aan";
 }
 
 function sortEffects(list, mode) {
@@ -986,6 +1148,7 @@ function sortEffects(list, mode) {
 function renderEffects() {
   effectPreviewRegistry.clear();
   const filter = qs("#effect-filter");
+  const searchInput = qs("#effect-search");
   const cats = [...new Set(state.effects.map((e) => e.category))];
   const selectedBefore = filter.value;
   filter.innerHTML = `<option value="">Alle categorieën</option>` + cats.map((c) => `<option value="${c}">${c}</option>`).join("");
@@ -993,6 +1156,7 @@ function renderEffects() {
   const list = qs("#effects-list");
   const selectedCat = filter.value;
   const sortMode = qs("#effect-sort")?.value || "name-asc";
+  const search = (searchInput?.value || "").toLowerCase();
   list.innerHTML = "";
 
   const renderSection = (label, effects) => {
@@ -1025,7 +1189,11 @@ function renderEffects() {
     });
   };
 
-  const filtered = state.effects.filter((e) => !selectedCat || e.category === selectedCat);
+  const filtered = state.effects.filter((e) => {
+    const inCat = !selectedCat || e.category === selectedCat;
+    const match = !search || (e.label || e.name).toLowerCase().includes(search) || (e.description || "").toLowerCase().includes(search);
+    return inCat && match;
+  });
   const sorted = sortEffects(filtered, sortMode);
   if (selectedCat) {
     renderSection("Effecten", sorted);
@@ -1140,6 +1308,27 @@ function renderEffectPresets() {
   }
 }
 
+function renderAllPresets() {
+  const wrap = qs("#all-presets");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  if (!state.presets || !state.presets.length) {
+    wrap.innerHTML = '<span class="muted">Nog geen presets opgeslagen.</span>';
+    return;
+  }
+  state.presets
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach((p) => {
+      const btn = document.createElement("button");
+      btn.className = "chip pill preset-chip";
+      const label = effectTitle(p.effect || "");
+      btn.innerHTML = `<strong>${p.name}</strong>${label ? `<span class="muted"> • ${label}</span>` : ""}`;
+      btn.onclick = () => applyPreset(p);
+      wrap.appendChild(btn);
+    });
+}
+
 function renderZones() {
   const list = qs("#zones-list");
   list.innerHTML = "";
@@ -1214,7 +1403,19 @@ async function applyEffect(effect) {
   if (mergedParams.color && qs("#color")) {
     qs("#color").value = rgbToHex(mergedParams.color);
   }
+  // ensure output is on
+  if (!state.current.on || (state.current.brightness ?? 0) === 0) {
+    const restore = lastBrightnessBeforeKill ?? liveDefaults?.brightness ?? 180;
+    state.current.on = true;
+    state.current.brightness = restore;
+    try {
+      await api("/api/state", "POST", { on: true, brightness: restore });
+    } catch (e) {
+      console.error("Kon licht niet aanzetten", e);
+    }
+  }
   try {
+    await api("/api/state", "POST", { on: true, brightness: state.current.brightness });
     const res = await api("/api/effect", "POST", { effect: effect.name, effect_params: state.current.effect_params, live: ensureLive(), apply_segments: true });
     if (res?.state) {
       state.current = res.state;
@@ -1222,6 +1423,12 @@ async function applyEffect(effect) {
       state.current.params = state.current.effect_params;
       state.current.live = { ...defaultLive, ...(state.current.live || {}) };
       state.current.frame_preview = state.current.frame_preview || [];
+      if (!state.current.on || (state.current.brightness ?? 0) <= 0) {
+        const restore = lastBrightnessBeforeKill ?? liveDefaults?.brightness ?? 180;
+        state.current.on = true;
+        state.current.brightness = restore;
+        await api("/api/state", "POST", { on: true, brightness: restore });
+      }
       setUiValues();
       updateLive();
     }
@@ -1238,12 +1445,27 @@ async function applyEffect(effect) {
     console.error(err);
     alert("Kon effect niet toepassen: " + err);
   }
+  updateStats();
   renderEffects();
   renderEffectPresets();
 }
 
 function buildParams() {
   return buildParamsWithColors(true);
+}
+
+function buildPresetPayload(name) {
+  return {
+    name,
+    effect: state.current.effect,
+    effect_params: getEffectParams(),
+    live: ensureLive(),
+    brightness: state.current.brightness,
+    intensity_boost: state.current.intensity_boost,
+    fps: state.current.fps,
+    max_leds: state.current.max_leds,
+    segments: state.current.segments || [],
+  };
 }
 
 function buildParamsWithColors(includeExisting) {
@@ -1290,55 +1512,46 @@ function applyLivePreset(key) {
 }
 
 document.querySelectorAll(".slider").forEach(enhanceSlider);
+document.querySelectorAll("[data-reset]").forEach((btn) => {
+  btn.addEventListener("click", () => resetControl(btn.getAttribute("data-reset")));
+});
 
-// Events
-const brightnessEl = qs("#brightness");
-if (brightnessEl) {
-  enhanceSlider(brightnessEl);
-  brightnessEl.addEventListener("input", (e) => {
+const maxLedsInput = qs("#max-leds");
+if (maxLedsInput) {
+  maxLedsInput.addEventListener("change", (e) => {
     markActiveLivePreset(null);
-    const val = parseInt(e.target.value, 10);
-    qs("#brightness-val").textContent = val;
-    state.current.brightness = val;
-    pushState({ brightness: val });
-  });
-}
-
-const intensityEl = qs("#intensity-boost");
-if (intensityEl) {
-  enhanceSlider(intensityEl);
-  intensityEl.addEventListener("input", (e) => {
-    markActiveLivePreset(null);
-    const val = parseFloat(e.target.value);
-    state.current.intensity_boost = val;
-    qs("#intensity-boost-val").textContent = `${val.toFixed(2)}x`;
-    pushState({ intensity_boost: val });
-  });
-}
-
-const fpsEl = qs("#fps");
-if (fpsEl) {
-  enhanceSlider(fpsEl);
-  fpsEl.addEventListener("input", (e) => {
-    markActiveLivePreset(null);
-    const val = parseInt(e.target.value, 10);
-    state.current.fps = val;
-    qs("#fps-val").textContent = `${val} fps`;
-    pushState({ fps: val });
-  });
-}
-
-const maxLedsEl = qs("#max-leds");
-if (maxLedsEl) {
-  enhanceSlider(maxLedsEl);
-  maxLedsEl.addEventListener("input", (e) => {
-    markActiveLivePreset(null);
-    const val = parseInt(e.target.value, 10);
+    const val = clampNumber(parseInt(e.target.value, 10), 1, state.hardware?.led_count || 300);
     state.current.max_leds = val;
     qs("#max-leds-val").textContent = `${val} leds`;
     pushState({ max_leds: val });
   });
 }
+
+// Events
+const brightnessEl = qs("#brightness");
+syncSliderNumber("#brightness", "#brightness-num", (val) => {
+  markActiveLivePreset(null);
+  const v = parseInt(val, 10);
+  qs("#brightness-val").textContent = v;
+  state.current.brightness = v;
+  pushState({ brightness: v });
+});
+
+syncSliderNumber("#intensity-boost", "#intensity-boost-num", (val) => {
+  markActiveLivePreset(null);
+  state.current.intensity_boost = parseFloat(val);
+  qs("#intensity-boost-val").textContent = `${parseFloat(val).toFixed(2)}x`;
+  pushState({ intensity_boost: parseFloat(val) });
+});
+
+const fpsEl = qs("#fps");
+syncSliderNumber("#fps", "#fps-num", (val) => {
+  markActiveLivePreset(null);
+  const v = parseInt(val, 10);
+  state.current.fps = v;
+  qs("#fps-val").textContent = `${v} fps`;
+  pushState({ fps: v });
+});
 
 const bindParamSlider = (id, key, formatter = (v) => v.toFixed(2)) => {
   const el = qs(id);
@@ -1367,9 +1580,40 @@ const bindParamSlider = (id, key, formatter = (v) => v.toFixed(2)) => {
   });
 };
 
-bindParamSlider("#live-smoothing", "smoothing");
-bindParamSlider("#live-gamma", "gamma");
-bindParamSlider("#live-fade", "fade");
+syncSliderNumber("#live-smoothing", "#live-smoothing-num", (val) => {
+  markActiveLivePreset(null);
+  const v = parseFloat(val);
+  const live = ensureLive();
+  live.frame_blend = v;
+  live.smoothing = v;
+  state.current.live = live;
+  const label = qs("#live-smoothing-val");
+  if (label) label.textContent = v.toFixed(2);
+  pushState({ live });
+});
+
+syncSliderNumber("#live-gamma", "#live-gamma-num", (val) => {
+  markActiveLivePreset(null);
+  const v = parseFloat(val);
+  const live = ensureLive();
+  live.gamma = v;
+  state.current.live = live;
+  const label = qs("#live-gamma-val");
+  if (label) label.textContent = v.toFixed(2);
+  pushState({ live });
+});
+
+syncSliderNumber("#live-fade", "#live-fade-num", (val) => {
+  markActiveLivePreset(null);
+  const v = parseFloat(val);
+  const live = ensureLive();
+  live.dither_strength = v;
+  live.dither = v > 0.05;
+  state.current.live = live;
+  const label = qs("#live-fade-val");
+  if (label) label.textContent = v.toFixed(2);
+  pushState({ live });
+});
 
 const liveReset = qs("#live-reset");
 if (liveReset) {
@@ -1381,20 +1625,17 @@ document.querySelectorAll("[data-live-preset]").forEach((btn) => {
 });
 
 const speedEl = qs("#live-speed");
-if (speedEl) {
-  enhanceSlider(speedEl);
-  speedEl.addEventListener("input", (e) => {
-    markActiveLivePreset(null);
-    const mult = parseFloat(e.target.value);
-    state.ui.speed_multiplier = mult;
-    const live = ensureLive();
-    live.master_speed = mult;
-    state.current.live = live;
-    const label = qs("#live-speed-val");
-    if (label) label.textContent = `${mult.toFixed(2)}x`;
-    pushState({ live });
-  });
-}
+syncSliderNumber("#live-speed", "#live-speed-num", (val) => {
+  markActiveLivePreset(null);
+  const mult = parseFloat(val);
+  state.ui.speed_multiplier = mult;
+  const live = ensureLive();
+  live.master_speed = mult;
+  state.current.live = live;
+  const label = qs("#live-speed-val");
+  if (label) label.textContent = `${mult.toFixed(2)}x`;
+  pushState({ live });
+});
 
 const dirSel = qs("#live-direction");
 if (dirSel) {
@@ -1421,31 +1662,68 @@ if (colorInput) {
 
 qs("#power-btn").onclick = () => {
   state.current.on = !state.current.on;
-  api("/api/state", "POST", { on: state.current.on });
+  let body = { on: state.current.on };
+  if (state.current.on && (state.current.brightness ?? 0) === 0) {
+    const restore = lastBrightnessBeforeKill ?? liveDefaults?.brightness ?? 180;
+    state.current.brightness = restore;
+    qs("#brightness").value = restore;
+    const bnum = qs("#brightness-num");
+    if (bnum) bnum.value = restore;
+    qs("#brightness-val").textContent = restore;
+    body = { ...body, brightness: restore };
+  }
+  api("/api/state", "POST", body);
   updateStats();
 };
 
 qs("#effect-toggle").onclick = () => {
   state.current.on = !state.current.on;
-  api("/api/state", "POST", { on: state.current.on });
+  let body = { on: state.current.on };
+  if (state.current.on && (state.current.brightness ?? 0) === 0) {
+    const restore = lastBrightnessBeforeKill ?? liveDefaults?.brightness ?? 180;
+    state.current.brightness = restore;
+    qs("#brightness").value = restore;
+    const bnum = qs("#brightness-num");
+    if (bnum) bnum.value = restore;
+    qs("#brightness-val").textContent = restore;
+    body = { ...body, brightness: restore };
+  }
+  api("/api/state", "POST", body);
   qs("#effect-toggle").textContent = state.current.on ? "Stop effect" : "Start effect";
   updateStats();
 };
 
 const killAllBtn = qs("#kill-all");
 if (killAllBtn) {
-  killAllBtn.addEventListener("click", () => {
-    state.current.on = false;
-    state.current.brightness = 0;
-    qs("#brightness").value = 0;
-    qs("#brightness-val").textContent = "0";
-    api("/api/state", "POST", { on: false, brightness: 0 });
+  killAllBtn.addEventListener("click", async () => {
+    if (state.current.on && (state.current.brightness ?? 0) > 0) {
+      lastBrightnessBeforeKill = state.current.brightness;
+      state.current.on = false;
+      state.current.brightness = 0;
+      qs("#brightness").value = 0;
+      const bnum = qs("#brightness-num");
+      if (bnum) bnum.value = 0;
+      qs("#brightness-val").textContent = "0";
+      await api("/api/state", "POST", { on: false, brightness: 0 });
+    } else {
+      const restore = lastBrightnessBeforeKill ?? liveDefaults?.brightness ?? 180;
+      state.current.on = true;
+      state.current.brightness = restore;
+      qs("#brightness").value = restore;
+      const bnum = qs("#brightness-num");
+      if (bnum) bnum.value = restore;
+      qs("#brightness-val").textContent = `${restore}`;
+      await api("/api/state", "POST", { on: true, brightness: restore });
+    }
     updateStats();
   });
 }
 
 qs("#effect-filter").addEventListener("change", renderEffects);
 qs("#effect-sort").addEventListener("change", renderEffects);
+qs("#effect-search")?.addEventListener("input", () => {
+  renderEffects();
+});
 
 qs("#add-alarm")?.addEventListener("click", () => {
   const timeStr = prompt("Tijd (HH:MM)");
@@ -1476,6 +1754,23 @@ qs("#audio-smooth")?.addEventListener("input", (e) => {
 qs("#audio-beat")?.addEventListener("input", (e) => {
   const beat_threshold = parseFloat(e.target.value);
   api("/api/audio", "POST", { beat_threshold });
+});
+
+function applyAudioPreset(key) {
+  const preset = audioPresets[key];
+  if (!preset) return;
+  const { gain, smoothing, beat_threshold } = preset;
+  const sens = qs("#audio-sens");
+  const sm = qs("#audio-smooth");
+  const beat = qs("#audio-beat");
+  if (sens) sens.value = gain;
+  if (sm) sm.value = smoothing;
+  if (beat) beat.value = beat_threshold;
+  api("/api/audio", "POST", { gain, smoothing, beat_threshold });
+}
+
+document.querySelectorAll("[data-audio-preset]").forEach((btn) => {
+  btn.addEventListener("click", () => applyAudioPreset(btn.getAttribute("data-audio-preset")));
 });
 
 qs("#audio-toggle")?.addEventListener("click", () => {
@@ -1555,6 +1850,25 @@ document.querySelectorAll(".swatch").forEach((sw) => {
     });
   });
 });
+
+async function savePreset(nameInput) {
+  const input = typeof nameInput === "string" ? nameInput.trim() : "";
+  const provided = input || qs("#preset-name-input")?.value?.trim() || "";
+  const name = provided || prompt("Presetnaam");
+  if (!name) return;
+  const payload = buildPresetPayload(name);
+  try {
+    await api("/api/presets/save", "POST", payload);
+    if (qs("#preset-name-input")) qs("#preset-name-input").value = "";
+    await loadStatus();
+    renderEffectPresets();
+    renderAllPresets();
+    alert("Preset opgeslagen");
+  } catch (err) {
+    console.error(err);
+    alert("Kon preset niet opslaan: " + err);
+  }
+}
 
 hookBackupAndThemes();
 setupCollapsibles();
@@ -1738,4 +2052,14 @@ if (logoutBtn) {
     localStorage.removeItem("led_token");
     showAuth("Uitgelogd, log opnieuw in.");
   });
+}
+
+const savePresetBtn = qs("#save-effect-preset");
+if (savePresetBtn) {
+  savePresetBtn.addEventListener("click", () => savePreset());
+}
+
+const presetSaveBtn = qs("#preset-save-btn");
+if (presetSaveBtn) {
+  presetSaveBtn.addEventListener("click", () => savePreset(qs("#preset-name-input")?.value || ""));
 }

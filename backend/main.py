@@ -39,7 +39,8 @@ def require_auth(x_session_token: str | None = Header(default=None)) -> str:
 hardware_cfg = config_store.load("hardware")
 led_engine = LEDEngine(hardware_cfg)
 led_engine.start()
-led_engine.set_segments(config_store.get_zones())
+zones = config_store.get_zones()
+led_engine.set_segments(zones)
 
 audio_engine.start()
 
@@ -62,8 +63,44 @@ def apply_preset(preset: Dict) -> None:
     if live:
         state_updates["live"] = live
     led_engine.update_state(**state_updates)
-    if preset.get("segments"):
-        led_engine.set_segments(preset["segments"])
+    if "segments" in preset:
+        led_engine.set_segments(preset.get("segments") or [])
+
+
+def _get_default_preset() -> Dict | None:
+    ui_cfg = config_store.get_ui()
+    presets = config_store.get_presets()
+    preferred = (ui_cfg or {}).get("default_preset")
+    for preset in presets:
+        if preset.get("name") == preferred:
+            return preset
+    return presets[0] if presets else None
+
+
+def _apply_startup_preset(active_zones: List[Dict]) -> None:
+    if audio_engine.enabled:
+        return
+    if not active_zones:
+        return
+    music_only = True
+    for seg in active_zones:
+        effect_cls = EFFECTS.get(seg.get("effect"))
+        if not effect_cls or getattr(effect_cls, "category", "") != "music":
+            music_only = False
+            break
+    if not music_only:
+        return
+    preset = _get_default_preset()
+    if preset:
+        print("[ledweb] Audio input missing; applying default preset instead of music-only zones.")
+        apply_preset(preset)
+    else:
+        print("[ledweb] Audio input missing; using rainbow_cycle fallback.")
+        led_engine.set_segments([])
+        led_engine.update_state(effect="rainbow_cycle", effect_params={})
+
+
+_apply_startup_preset(zones)
 
 
 scheduler = Scheduler(on_trigger=lambda alarm: apply_preset({"effect": alarm.get("effect", "solid"), "params": alarm.get("params", {}), "segments": alarm.get("segments", [])}))
@@ -85,6 +122,24 @@ def login(body: Dict):
 
 @app.get("/api/status")
 def status(token: str = Depends(require_auth)):
+    def _schema(params: Dict) -> List[Dict]:
+        schema = []
+        for k, v in (params or {}).items():
+            entry = {"name": k, "type": "unknown"}
+            if isinstance(v, bool):
+                entry["type"] = "boolean"
+            elif isinstance(v, (int, float)):
+                entry["type"] = "number"
+            elif isinstance(v, str):
+                entry["type"] = "string"
+            elif isinstance(v, list):
+                if len(v) == 3 and all(isinstance(c, (int, float)) for c in v):
+                    entry["type"] = "color"
+                else:
+                    entry["type"] = "list"
+            schema.append(entry)
+        return schema
+
     return {
         "state": led_engine.snapshot(),
         "hardware": hardware_cfg,
@@ -95,6 +150,7 @@ def status(token: str = Depends(require_auth)):
                 "category": cls.category,
                 "description": cls.description,
                 "default_params": cls.default_params,
+                "param_schema": _schema(getattr(cls, "default_params", {})),
             }
             for name, cls in EFFECTS.items()
         ],
