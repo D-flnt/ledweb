@@ -1,7 +1,16 @@
-# LedWeb Dependencies
-# Installeer met: pip3 install -r requirements.txt
-# Of voor Python 3.13+: pip3 install --break-system-packages -r requirements.txt
+# LedWeb Backend Dependencies
+# Backend gebruikt FastAPI, niet Flask!
 
-flask>=2.3.0
-flask-cors>=4.0.0
+# Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Configuration
 python-dotenv>=1.0.0
+
+# LED Control (optioneel - alleen op Pi met GPIO)
+# rpi_ws281x>=5.0.0
+
+# Audio Processing (optioneel)
+# pyaudio>=0.2.13
+# numpy>=1.24.0
