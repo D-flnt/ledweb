@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <title>LED Controller — LedWeb</title>
+  <link rel="stylesheet" href="/frontend/style_v2.css">
+</head>
+<body>
+
+  <!-- Auth Modal -->
+  <div id="auth-modal" class="modal" hidden>
+    <div class="modal-overlay" data-close-modal></div>
+    <div class="modal-content auth-modal">
+      <div class="modal-header">
+        <h2>🔒 Toegang</h2>
+        <p>Voer wachtwoord in om verder te gaan</p>
+      </div>
+      <form id="auth-form" class="modal-body">
+        <input 
+          id="auth-password" 
+          type="password" 
+          placeholder="Wachtwoord" 
+          autocomplete="current-password" 
+          required 
+          class="input-field"
+        />
+        <button type="submit" class="btn btn-primary btn-block">Inloggen</button>
+      </form>
+      <div class="modal-footer">
+        <button id="auth-logout" class="btn btn-ghost btn-sm">Log uit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app" class="app-container" hidden>
+    
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <h1 class="logo">🌈 LedWeb</h1>
+        <div class="status-badges">
+          <span class="badge badge-success" id="status-badge">
+            <span class="badge-dot"></span>
+            <span id="status-text">Online</span>
+          </span>
+          <span class="badge" id="effect-badge">Effect: --</span>
+          <span class="badge" id="brightness-badge">Helderheid: --</span>
+        </div>
+      </div>
+      <div class="top-bar-right">
+        <button class="btn btn-icon" id="audio-indicator" title="Audio reactief">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+          </svg>
+          <span class="badge-mini" id="audio-status">OFF</span>
+        </button>
+        <button class="btn btn-icon" id="settings-btn" title="Instellingen">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m10-7h-6m-6 0H4"/>
+          </svg>
+        </button>
+        <button class="btn btn-danger btn-sm" id="kill-all">⚡ Alles uit</button>
+      </div>
+    </header>
+
+    <!-- Quick Actions Bar (Mobile Optimized) -->
+    <div class="quick-actions">
+      <button class="quick-btn" data-quick="rainbow_cycle">
+        <span class="quick-icon">🌈</span>
+        <span class="quick-label">Rainbow</span>
+      </button>
+      <button class="quick-btn" data-quick="fire_audio">
+        <span class="quick-icon">🔥</span>
+        <span class="quick-label">Fire</span>
+      </button>
+      <button class="quick-btn" data-quick="audio_bars">
+        <span class="quick-icon">🎧</span>
+        <span class="quick-label">Bars</span>
+      </button>
+      <button class="quick-btn" data-quick="aurora">
+        <span class="quick-icon">✨</span>
+        <span class="quick-label">Aurora</span>
+      </button>
+      <button class="quick-btn" data-quick="solid">
+        <span class="quick-icon">💡</span>
+        <span class="quick-label">Solid</span>
+      </button>
+    </div>
+
+    <!-- Tab Navigation -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="effects">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        <span>Effecten</span>
+      </button>
+      <button class="tab-btn" data-tab="control">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/>
+        </svg>
+        <span>Besturing</span>
+      </button>
+      <button class="tab-btn" data-tab="presets">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span>Presets</span>
+      </button>
+      <button class="tab-btn" data-tab="audio">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+        </svg>
+        <span>Audio</span>
+      </button>
+      <button class="tab-btn" data-tab="zones">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+        <span>Zones</span>
+      </button>
+    </nav>
+
+    <!-- Tab Content -->
+    <main class="tab-content">
+      
+      <!-- TAB 1: EFFECTEN -->
+      <section id="tab-effects" class="tab-pane active">
+        
+        <!-- LED Preview (Prominent) -->
+        <div class="card preview-card">
+          <div class="card-header">
+            <h3>📊 LED Visualisatie</h3>
+            <span class="badge" id="led-count-badge">300 LEDs</span>
+          </div>
+          <canvas id="led-preview" class="led-canvas" height="120"></canvas>
+          <p class="card-hint">Live preview van je LED strip</p>
+        </div>
+
+        <!-- Effect Search & Filter -->
+        <div class="card">
+          <div class="search-bar">
+            <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input 
+              id="effect-search" 
+              type="search" 
+              placeholder="Zoek effect (bijv. rainbow, fire, audio)..." 
+              class="search-input"
+            />
+          </div>
+          <div class="filter-row">
+            <select id="effect-filter" class="select-field">
+              <option value="">Alle categorieën</option>
+            </select>
+            <select id="effect-sort" class="select-field">
+              <option value="name-asc">A-Z</option>
+              <option value="name-desc">Z-A</option>
+              <option value="category">Categorie</option>
+              <option value="music-first">Muziek eerst</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Effects Grid -->
+        <div id="effects-grid" class="effects-grid"></div>
+
+        <!-- Effect Parameters (Bottom Sheet Style) -->
+        <div class="card params-card">
+          <div class="card-header expandable" data-toggle="params-content">
+            <div>
+              <h3>⚙️ Parameters</h3>
+              <p class="card-hint">Pas het geselecteerde effect aan</p>
+            </div>
+            <svg class="chevron-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+          </div>
+          <div id="params-content" class="expandable-content">
+            <div id="effect-params" class="params-grid"></div>
+            <button id="save-effect-preset" class="btn btn-outline btn-block">Bewaar als Preset</button>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- TAB 2: BESTURING -->
+      <section id="tab-control" class="tab-pane">
+        
+        <!-- Power & Master Controls -->
+        <div class="card">
+          <div class="card-header">
+            <h3>⚡ Master Controls</h3>
+          </div>
+          <div class="button-grid">
+            <button id="power-btn" class="btn btn-lg btn-success">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
+              </svg>
+              Power Aan
+            </button>
+            <button id="effect-toggle" class="btn btn-lg btn-outline">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+              </svg>
+              Pauzeer
+            </button>
+          </div>
+        </div>
+
+        <!-- Brightness Control -->
+        <div class="card">
+          <div class="card-header">
+            <h3>🔆 Helderheid</h3>
+            <span class="value-display" id="brightness-display">180</span>
+          </div>
+          <div class="slider-group">
+            <input 
+              id="brightness-slider" 
+              type="range" 
+              min="0" 
+              max="255" 
+              value="180" 
+              class="slider"
+            />
+            <div class="slider-labels">
+              <span>0</span>
+              <span>255</span>
+            </div>
+          </div>
+          <div class="preset-buttons">
+            <button class="preset-btn" data-brightness="50">20%</button>
+            <button class="preset-btn" data-brightness="128">50%</button>
+            <button class="preset-btn" data-brightness="200">80%</button>
+            <button class="preset-btn" data-brightness="255">100%</button>
+          </div>
+        </div>
+
+        <!-- Speed/Tempo Control -->
+        <div class="card">
+          <div class="card-header">
+            <h3>⏱️ Snelheid</h3>
+            <span class="value-display" id="speed-display">1.0x</span>
+          </div>
+          <div class="slider-group">
+            <input 
+              id="speed-slider" 
+              type="range" 
+              min="0.1" 
+              max="5" 
+              step="0.1" 
+              value="1" 
+              class="slider"
+            />
+            <div class="slider-labels">
+              <span>Langzaam</span>
+              <span>Snel</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Color Picker -->
+        <div class="card">
+          <div class="card-header">
+            <h3>🎨 Kleur</h3>
+          </div>
+          <div class="color-picker-group">
+            <input id="color-picker" type="color" value="#00ffff" class="color-input">
+            <div class="color-presets">
+              <button class="color-preset" data-color="#ffffff" style="background: #ffffff" title="Wit"></button>
+              <button class="color-preset" data-color="#ff0000" style="background: #ff0000" title="Rood"></button>
+              <button class="color-preset" data-color="#00ff00" style="background: #00ff00" title="Groen"></button>
+              <button class="color-preset" data-color="#0000ff" style="background: #0000ff" title="Blauw"></button>
+              <button class="color-preset" data-color="#ffff00" style="background: #ffff00" title="Geel"></button>
+              <button class="color-preset" data-color="#ff00ff" style="background: #ff00ff" title="Magenta"></button>
+              <button class="color-preset" data-color="#00ffff" style="background: #00ffff" title="Cyaan"></button>
+              <button class="color-preset" data-color="#ffa500" style="background: #ffa500" title="Oranje"></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Advanced Settings (Collapsible) -->
+        <div class="card">
+          <div class="card-header expandable" data-toggle="advanced-settings">
+            <div>
+              <h3>⚙️ Geavanceerd</h3>
+              <p class="card-hint">Gamma, FPS, smoothing</p>
+            </div>
+            <svg class="chevron-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+          </div>
+          <div id="advanced-settings" class="expandable-content" hidden>
+            <div class="control-group">
+              <label>FPS <span id="fps-val">60</span></label>
+              <input id="fps-slider" type="range" min="20" max="120" step="5" value="60" class="slider">
+            </div>
+            <div class="control-group">
+              <label>Gamma <span id="gamma-val">1.0</span></label>
+              <input id="gamma-slider" type="range" min="0.5" max="2.5" step="0.1" value="1.0" class="slider">
+            </div>
+            <div class="control-group">
+              <label>Smoothing <span id="smoothing-val">0.15</span></label>
+              <input id="smoothing-slider" type="range" min="0" max="1" step="0.05" value="0.15" class="slider">
+            </div>
+            <div class="control-group">
+              <label>Richting</label>
+              <select id="direction-select" class="select-field">
+                <option value="forward">Vooruit</option>
+                <option value="reverse">Achteruit</option>
+                <option value="center">Midden uit</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- TAB 3: PRESETS -->
+      <section id="tab-presets" class="tab-pane">
+        
+        <!-- Save New Preset -->
+        <div class="card">
+          <div class="card-header">
+            <h3>💾 Preset opslaan</h3>
+            <p class="card-hint">Bewaar huidige instellingen</p>
+          </div>
+          <div class="input-group">
+            <input 
+              id="preset-name-input" 
+              type="text" 
+              placeholder="Naam (bijv. Party Mode)" 
+              class="input-field"
+            />
+            <button id="preset-save-btn" class="btn btn-primary">Opslaan</button>
+          </div>
+        </div>
+
+        <!-- Preset List -->
+        <div class="card">
+          <div class="card-header">
+            <h3>📁 Mijn Presets</h3>
+          </div>
+          <div id="presets-list" class="presets-list"></div>
+          <p class="card-hint" id="presets-empty" hidden>Nog geen presets opgeslagen</p>
+        </div>
+
+      </section>
+
+      <!-- TAB 4: AUDIO -->
+      <section id="tab-audio" class="tab-pane">
+        
+        <!-- Audio Visualizer -->
+        <div class="card">
+          <div class="card-header">
+            <h3>🎤 Audio Spectrum</h3>
+            <div class="badge-group">
+              <span class="badge" id="volume-badge">Vol: 0%</span>
+              <span class="badge" id="bpm-badge">BPM: --</span>
+            </div>
+          </div>
+          <canvas id="audio-canvas" class="audio-canvas" height="180"></canvas>
+        </div>
+
+        <!-- Audio Toggle -->
+        <div class="card">
+          <div class="button-grid">
+            <button id="audio-toggle" class="btn btn-lg btn-success">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              </svg>
+              Audio Inschakelen
+            </button>
+          </div>
+        </div>
+
+        <!-- Audio Settings -->
+        <div class="card">
+          <div class="card-header">
+            <h3>⚙️ Audio Instellingen</h3>
+          </div>
+          <div class="control-group">
+            <label>Gevoeligheid (Gain) <span id="audio-gain-val">1.0x</span></label>
+            <input id="audio-gain" type="range" min="0.1" max="5" step="0.1" value="1" class="slider">
+          </div>
+          <div class="control-group">
+            <label>Smoothing <span id="audio-smoothing-val">0.35</span></label>
+            <input id="audio-smoothing" type="range" min="0.05" max="0.95" step="0.05" value="0.35" class="slider">
+          </div>
+          <div class="control-group">
+            <label>Beat Drempel <span id="audio-threshold-val">0.35</span></label>
+            <input id="audio-threshold" type="range" min="0.05" max="0.9" step="0.05" value="0.35" class="slider">
+          </div>
+        </div>
+
+        <!-- Audio Presets -->
+        <div class="card">
+          <div class="card-header">
+            <h3>🎶 Audio Presets</h3>
+          </div>
+          <div class="preset-buttons">
+            <button class="preset-btn" data-audio-preset="calm">Rustig</button>
+            <button class="preset-btn" data-audio-preset="club">Club</button>
+            <button class="preset-btn" data-audio-preset="live">Live</button>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- TAB 5: ZONES -->
+      <section id="tab-zones" class="tab-pane">
+        
+        <div class="card">
+          <div class="card-header">
+            <h3>📍 LED Zones</h3>
+            <p class="card-hint">Verdeel je strip in segmenten met verschillende effecten</p>
+          </div>
+          <button id="add-zone-btn" class="btn btn-primary btn-block">+ Zone toevoegen</button>
+        </div>
+
+        <!-- Zones List -->
+        <div id="zones-list" class="zones-list"></div>
+        <p class="card-hint" id="zones-empty">Nog geen zones aangemaakt. Klik op "Zone toevoegen" om te beginnen.</p>
+
+        <!-- Zone Editor Modal (would open when adding/editing) -->
+        
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation (Mobile) -->
+    <nav class="bottom-nav">
+      <button class="bottom-nav-btn active" data-tab="effects">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        <span>Effecten</span>
+      </button>
+      <button class="bottom-nav-btn" data-tab="control">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <span>Bediening</span>
+      </button>
+      <button class="bottom-nav-btn" data-tab="presets">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span>Presets</span>
+      </button>
+      <button class="bottom-nav-btn" data-tab="audio">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 18V5l12-2v13"/>
+        </svg>
+        <span>Audio</span>
+      </button>
+      <button class="bottom-nav-btn" data-tab="zones">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"/>
+        </svg>
+        <span>Zones</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- Toast Notifications -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/frontend/app_v2.js"></script>
+</body>
+</html>
