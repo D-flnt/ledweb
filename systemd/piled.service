@@ -1,14 +1,42 @@
 [Unit]
-Description=Pi LED Controller
-After=network.target sound.target
+Description=Pi LED Controller (LedWeb)
+After=network-online.target sound.target
+Wants=network-online.target
+Documentation=https://github.com/D-flnt/ledweb
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/home/pi
-Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/pi/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8080
-Restart=on-failure
+WorkingDirectory=/home/pi/ledweb
+Environment="PYTHONUNBUFFERED=1"
+Environment="PATH=/home/pi/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Start command
+ExecStart=/home/pi/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8080 --log-level info
+
+# Restart policies
+Restart=always
+RestartSec=10
+StartLimitInterval=200
+StartLimitBurst=5
+
+# Watchdog (restart if process hangs)
+WatchdogSec=30
+
+# Security & Resource limits
+NoNewPrivileges=false
+LimitNOFILE=65536
+LimitNPROC=512
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ledweb
+
+# Graceful shutdown
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=15
 
 [Install]
 WantedBy=multi-user.target
